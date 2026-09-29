@@ -1,0 +1,10 @@
+BasedOnStyle: Google
+IndentWidth: 2
+ColumnLimit: 140
+BreakBeforeBraces: Allman
+AllowShortFunctionsOnASingleLine: Inline
+AllowShortIfStatementsOnASingleLine: Never
+AccessModifierOffset: -2
+DerivePointerAlignment: false
+PointerAlignment: Right
+IndentPPDirectives: AfterHash
