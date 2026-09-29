@@ -15,6 +15,7 @@
 #include "sfm/incremental_mapper.h"
 #include "sfm/matching.h"
 #include "sfm/ortho.h"
+#include "sfm/priors.h"
 #include "sfm/triangulation.h"
 #include "sfm/two_view.h"
 
@@ -43,6 +44,9 @@ struct SfmConfig
   std::map<CameraId, Camera> cameras;
   CameraId default_camera = 0;
   std::map<std::string, CameraId> image_cameras; ///< per-image camera overrides, by file name
+  /// Cameras whose intrinsics are read from EXIF at load time -> sensor width override in mm (0 = lookup).
+  std::map<CameraId, double> exif_cameras;
+  TrajectoryParams trajectory;
 
   SiftParams sift;
   MatchingParams matching;

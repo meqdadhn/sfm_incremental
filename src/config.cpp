@@ -46,10 +46,12 @@ void ReadBundle(const YAML::Node &n, BundleAdjustmentParams *p)
   Read(n, "verbose", &p->verbose);
 }
 
-Camera ReadCamera(const YAML::Node &n, const fs::path &base)
+Camera ReadCamera(const YAML::Node &n, const fs::path &base, bool *from_exif)
 {
   Camera cam;
   Read(n, "id", &cam.id);
+  *from_exif = false;
+  Read(n, "from_exif", from_exif);
   if (n["calibration_file"])
   {
     std::string k_key = "camera_matrix", d_key = "distortion_coefficients";
@@ -71,8 +73,8 @@ Camera ReadCamera(const YAML::Node &n, const fs::path &base)
     cam.dist.fill(0.0);
     std::copy(d.begin(), d.end(), cam.dist.begin());
   }
-  if (cam.fx <= 0 || cam.fy <= 0)
-    throw std::runtime_error("Camera " + std::to_string(cam.id) + " needs fx, fy > 0");
+  if (!*from_exif && (cam.fx <= 0 || cam.fy <= 0))
+    throw std::runtime_error("Camera " + std::to_string(cam.id) + " needs fx, fy > 0 (or from_exif: true)");
   return cam;
 }
 } // namespace
@@ -130,9 +132,21 @@ SfmConfig LoadConfig(const std::string &path)
     throw std::runtime_error("Config needs at least one entry in cameras");
   for (const auto &n : root["cameras"])
   {
-    Camera cam = ReadCamera(n, base);
+    bool from_exif = false;
+    Camera cam = ReadCamera(n, base, &from_exif);
     cfg.cameras[cam.id] = cam;
+    if (from_exif)
+    {
+      double sensor_width = 0.0;
+      Read(n, "sensor_width_mm", &sensor_width);
+      cfg.exif_cameras[cam.id] = sensor_width;
+    }
   }
+
+  const YAML::Node trj = root["trajectory"];
+  Read(trj, "source", &cfg.trajectory.source);
+  Read(trj, "file", &cfg.trajectory.file);
+  cfg.trajectory.file = Resolve(base, cfg.trajectory.file);
   cfg.default_camera = cfg.cameras.begin()->first;
   Read(root, "default_camera", &cfg.default_camera);
   Read(root, "image_cameras", &cfg.image_cameras);
@@ -149,6 +163,10 @@ SfmConfig LoadConfig(const std::string &path)
   const YAML::Node m = root["matching"];
   Read(m, "mode", &cfg.matching.mode);
   Read(m, "sequential_overlap", &cfg.matching.sequential_overlap);
+  Read(m, "search", &cfg.matching.search);
+  Read(m, "knn", &cfg.matching.knn);
+  Read(m, "radius", &cfg.matching.radius);
+  Read(m, "max_neighbors", &cfg.matching.max_neighbors);
   Read(m, "ratio", &cfg.matching.ratio);
   Read(m, "cross_check", &cfg.matching.cross_check);
   Read(m, "flann_trees", &cfg.matching.flann_trees);

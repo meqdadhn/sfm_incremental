@@ -18,11 +18,19 @@ cameras:
     dist: [0.0, 0.0, 0.0, 0.0, 0.0]
     # width / height are read from the first image if omitted
   # - id: 1
+  #   from_exif: true                        # fx, fy, cx, cy from the first image's EXIF (no distortion)
+  #   sensor_width_mm: 6.17                  # only needed if the camera is not in the built-in table
+  # - id: 2
   #   calibration_file: calib/cam1.yml       # OpenCV FileStorage file
   #   camera_matrix_key: camera_matrix       # node names inside the file
   #   distortion_key: distortion_coefficients
 
 default_camera: 0
+
+# Position priors, used by matching.mode: trajectory (and written to <output_dir>/trajectory_priors.txt).
+trajectory:
+  source: none            # none | exif (GPS -> local ENU meters) | file
+  # file: trajectory.txt  # "omega phi kappa X Y Z" per image in image order (original format), or "name X Y Z"
 image_cameras: {}         # per-image overrides, e.g. {img_0001.png: 1}
 
 features:
@@ -35,8 +43,12 @@ features:
   root_sift: true
 
 matching:
-  mode: exhaustive        # exhaustive | sequential
+  mode: exhaustive        # exhaustive | sequential | trajectory
   sequential_overlap: 10
+  search: knn             # trajectory mode: knn | radius
+  knn: 20
+  radius: 10.0            # trajectory units (meters for EXIF GPS)
+  max_neighbors: 50       # radius search cap
   ratio: 0.8
   cross_check: true
   flann_trees: 4

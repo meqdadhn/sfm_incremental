@@ -1,6 +1,8 @@
 #include "sfm/pipeline.h"
 
+#include <algorithm>
 #include <chrono>
+#include <fstream>
 #include <filesystem>
 #include <functional>
 #include <sstream>
@@ -14,6 +16,7 @@
 #include "sfm/io.h"
 #include "sfm/matching.h"
 #include "sfm/ortho.h"
+#include "sfm/priors.h"
 #include "sfm/tracks.h"
 #include "sfm/two_view.h"
 
@@ -49,7 +52,8 @@ uint64_t RopHash(const SfmConfig &c, const std::vector<Image> &images)
 {
   std::ostringstream ss;
   ss.precision(17);
-  ss << SiftHash(c.sift) << "|" << c.matching.mode << "|" << c.matching.sequential_overlap << "|" << c.matching.ratio << "|" << c.matching.cross_check
+  ss << SiftHash(c.sift) << "|" << c.matching.mode << "|" << c.matching.sequential_overlap << "|" << c.matching.search << "|"
+     << c.matching.knn << "|" << c.matching.radius << "|" << c.matching.max_neighbors << "|" << c.matching.ratio << "|" << c.matching.cross_check
      << "|" << c.matching.flann_trees << "|" << c.matching.flann_checks << "|" << c.matching.min_matches << "|" << c.two_view.ransac_threshold_px
      << "|" << c.two_view.confidence << "|" << c.two_view.min_inliers << "|" << c.two_view.refine << "|" << c.two_view.refine_loss_px << "|"
      << c.two_view.homography_threshold_px;
@@ -61,7 +65,11 @@ uint64_t RopHash(const SfmConfig &c, const std::vector<Image> &images)
       ss << "," << d;
   }
   for (const Image &im : images)
+  {
     ss << "|" << im.name << ":" << im.camera_id;
+    if (c.matching.mode == "trajectory" && im.has_prior)
+      ss << "@" << im.prior_position.x() << "," << im.prior_position.y() << "," << im.prior_position.z();
+  }
   return std::hash<std::string>()(ss.str());
 }
 } // namespace
@@ -103,6 +111,47 @@ void Pipeline::LoadImages()
       throw std::runtime_error("Image " + name + " uses unknown camera " + std::to_string(image.camera_id));
     rec_.images.push_back(std::move(image));
   }
+
+  // Preprocessing: intrinsics from EXIF for cameras configured with from_exif.
+  for (const auto &kv : config_.exif_cameras)
+  {
+    Camera &cam = rec_.cameras.at(kv.first);
+    const auto it = std::find_if(rec_.images.begin(), rec_.images.end(), [&](const Image &im) { return im.camera_id == cam.id; });
+    if (it == rec_.images.end())
+      continue;
+    ExifData exif;
+    if (!ReadExif(it->path, &exif))
+      throw std::runtime_error("Camera " + std::to_string(cam.id) + " uses from_exif but " + it->name + " has no EXIF");
+    int w = exif.width, h = exif.height;
+    if (w <= 0 || h <= 0)
+    {
+      const cv::Mat im = cv::imread(it->path, cv::IMREAD_UNCHANGED);
+      w = im.cols;
+      h = im.rows;
+    }
+    std::string method;
+    if (!CameraFromExif(exif, w, h, kv.second, &cam, &method))
+      throw std::runtime_error("Cannot derive intrinsics from the EXIF of " + it->name +
+                               " (no focal length, or unknown sensor: set sensor_width_mm)");
+    LOG(INFO) << "Camera " << cam.id << " from EXIF (" << exif.make << " " << exif.model << ", " << exif.focal_mm << " mm, " << method
+              << "): fx = fy = " << cam.fx << " px, " << w << " x " << h;
+  }
+
+  // Preprocessing: position priors (GPS or trajectory file), used by trajectory matching.
+  const int num_priors = LoadTrajectoryPriors(config_.trajectory, &rec_.images);
+  if (config_.trajectory.source != "none")
+  {
+    LOG(INFO) << "Trajectory (" << config_.trajectory.source << "): " << num_priors << " / " << rec_.images.size() << " images with a position prior";
+    fs::create_directories(config_.io.output_dir);
+    std::ofstream out(fs::path(config_.io.output_dir) / "trajectory_priors.txt");
+    out << "# name X Y Z" << (config_.trajectory.source == "exif" ? "   (local ENU meters, origin at the first image)" : "") << "\n";
+    out.precision(12);
+    for (const Image &image : rec_.images)
+      if (image.has_prior)
+        out << image.name << " " << image.prior_position.transpose() << "\n";
+  }
+  if (config_.matching.mode == "trajectory" && num_priors < 2)
+    throw std::runtime_error("matching.mode: trajectory needs position priors (set trajectory.source to exif or file)");
 
   // Fill in missing camera sizes from the first image using each camera.
   for (auto &kv : rec_.cameras)
@@ -180,7 +229,7 @@ void Pipeline::MatchAndEstimateRops()
 
   if (!(config_.io.use_cache && LoadViewGraph(cache_file, hash, n, &view_graph_)))
   {
-    const auto pairs = SelectPairs(n, config_.matching);
+    const auto pairs = SelectPairs(rec_.images, config_.matching);
     std::vector<TwoViewGeometry> results(pairs.size());
     std::vector<char> ok(pairs.size(), 0);
     int done = 0;
