@@ -5,12 +5,30 @@ Incremental structure-from-motion, a clean reimplementation of the original pipe
 
 | Stage | Module | Original |
 |---|---|---|
-| 1. Read images + cameras (YAML) | `config`, `pipeline` | `Load_img`, `.prj` |
+| 1. Read images + cameras (YAML); EXIF intrinsics / GPS trajectory | `config`, `pipeline`, `exif`, `priors` | `Load_img`, `.prj`, trajectory file |
 | 2. SIFT | `features` | `SIFT_operator` |
-| 3. FLANN matching + ROP (5-pt E in RANSAC, decomposition, Sampson refinement) | `matching`, `two_view` | `Flann_matching`, `Initial_estimate_hybrid` |
+| 3. Pair selection (exhaustive / sequential / trajectory knn or radius), FLANN matching + ROP (5-pt E in RANSAC, decomposition, Sampson refinement) | `matching`, `two_view` | option 2 "Trajectory Matching", `Flann_matching`, `Initial_estimate_hybrid` |
 | 4. Incremental extrinsics + window BA | `incremental_mapper`, `rotation_averaging`, `resection`, `bundle_adjustment` | `SfM_incremental_pba`, `Single_Rotation_Averaging_RANSAC`, `Translation_Estimation_trimming`, `Edge_link_trimming`, `pba_driver` |
 | 5. Feature tracking + final BA | `tracks`, `bundle_adjustment` | `Tracking_all`, `Remove_outliers`, `pba_driver` |
 | 6. Orthophoto in the map frame (optional) | `ortho` | `Generate_Ortho` |
+
+## Preprocessing: EXIF and trajectory
+
+- **Intrinsics from EXIF** (`cameras: - {id: 0, from_exif: true}`): fx = focal_mm /
+  sensor_width_mm × width. The sensor width comes from `sensor_width_mm`, a built-in table of
+  common drone cameras (`priors.cpp`), or the EXIF focal-plane resolution. The 35 mm
+  equivalent focal length is the last resort. The principal point is set to the center and
+  distortion to zero, so refine it with `final.ba.refine_intrinsics`.
+- **Trajectory priors** (`trajectory.source`): `exif` converts GPS to local ENU metres with
+  the origin at the first image. `file` accepts the original `omega phi kappa X Y Z` format
+  (one line per image, in image order) or `name X Y Z` lines. The priors are written to
+  `<output_dir>/trajectory_priors.txt`.
+- **Trajectory matching** (`matching.mode: trajectory`), as in the original option 2: each
+  image is matched only with its `knn` nearest images, or with those within `radius`
+  (capped at `max_neighbors`), and the neighbourhood graph is made symmetric. Images
+  without a prior are matched with every image.
+
+The EXIF reader is dependency-free and reads JPEG APP1 only.
 
 ## Incremental SfM
 
@@ -67,8 +85,11 @@ tools/download_brighton_beach.sh                        # OpenDroneMap sample, B
 ./build/sfm_main ~/sfm_data/brighton_beach/config.yaml   # about 20 s, ortho in out/ortho/
 ```
 
-Reference result: 18/18 images registered, 0.42 px mean reprojection error, and a
-4130 × 5520 px ortho with 95% coverage. It compares well with OpenDroneMap's own ortho
+The config uses EXIF intrinsics (fx = 2340 px), the GPS trajectory and trajectory matching
+(knn 8: 85 pairs instead of 153). Reference result: 18/18 images registered, 0.43 px mean
+reprojection error, and a ~4200 × 5700 px ortho with 95% coverage. The camera centers agree
+with GPS to 0.66 m mean over an 86 m flight after a similarity alignment, which also gives
+an ortho resolution of about 1.6 cm/px. It compares well with OpenDroneMap's own ortho
 (`brighton_beach.jpg`), up to the frame rotation, since ours is not georeferenced.
 
 For flat nadir scenes, keep `refine_focal_length: false`. Focal length and flying height

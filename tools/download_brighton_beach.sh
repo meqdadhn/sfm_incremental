@@ -29,18 +29,19 @@ io:
 
 cameras:
   - id: 0
-    fx: 2340.0          # 3.61 mm focal / 6.17 mm sensor width * 4000 px (EXIF)
-    fy: 2340.0
-    cx: 2000.0
-    cy: 1125.0
-    dist: [0.0, 0.0, 0.0, 0.0, 0.0]   # uncalibrated; refined in the final BA
+    from_exif: true     # 3.61 mm focal, known 6.17 mm sensor width -> fx = 2340 px; distortion refined in the final BA
+
+trajectory:
+  source: exif          # GPS -> local ENU meters
 
 features:
   max_image_dim: 2000   # SIFT on half resolution, keypoints mapped back to full resolution
   max_features: 8000
 
 matching:
-  mode: exhaustive
+  mode: trajectory      # match each image with its 8 nearest images (GPS)
+  search: knn
+  knn: 8
 
 final:
   ba:

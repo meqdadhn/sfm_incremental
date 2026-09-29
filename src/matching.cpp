@@ -1,5 +1,7 @@
 #include "sfm/matching.h"
 
+#include <algorithm>
+#include <set>
 #include <stdexcept>
 
 #include <opencv2/flann.hpp>
@@ -26,10 +28,42 @@ std::vector<int> RatioTestNN(cv::flann::Index &index, const cv::Mat &query, cons
 }
 } // namespace
 
-std::vector<std::pair<ImageId, ImageId>> SelectPairs(int num_images, const MatchingParams &params)
+std::vector<std::pair<ImageId, ImageId>> SelectPairs(const std::vector<Image> &images, const MatchingParams &params)
 {
+  const int num_images = static_cast<int>(images.size());
   std::vector<std::pair<ImageId, ImageId>> pairs;
-  if (params.mode == "exhaustive")
+  if (params.mode == "trajectory")
+  {
+    // Symmetric neighbourhood graph on the position priors (knn or radius), as in the original option 2.
+    std::set<std::pair<ImageId, ImageId>> selected;
+    for (int i = 0; i < num_images; ++i)
+    {
+      if (!images[i].has_prior)
+      {
+        for (int j = 0; j < num_images; ++j)
+          if (j != i)
+            selected.emplace(std::min(i, j), std::max(i, j));
+        continue;
+      }
+      std::vector<std::pair<double, int>> dist;
+      for (int j = 0; j < num_images; ++j)
+        if (j != i && images[j].has_prior)
+          dist.emplace_back((images[j].prior_position - images[i].prior_position).norm(), j);
+      std::sort(dist.begin(), dist.end());
+      size_t keep = 0;
+      if (params.search == "knn")
+        keep = std::min<size_t>(dist.size(), params.knn);
+      else if (params.search == "radius")
+        while (keep < dist.size() && keep < static_cast<size_t>(params.max_neighbors) && dist[keep].first <= params.radius)
+          ++keep;
+      else
+        throw std::invalid_argument("Unknown trajectory search: " + params.search);
+      for (size_t k = 0; k < keep; ++k)
+        selected.emplace(std::min(i, dist[k].second), std::max(i, dist[k].second));
+    }
+    pairs.assign(selected.begin(), selected.end());
+  }
+  else if (params.mode == "exhaustive")
   {
     for (int i = 0; i < num_images; ++i)
       for (int j = i + 1; j < num_images; ++j)

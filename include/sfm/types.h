@@ -108,6 +108,9 @@ struct Image
   CameraId camera_id = 0;
   Features features;
 
+  bool has_prior = false;           ///< position prior from GPS / trajectory file (preprocessing)
+  Eigen::Vector3d prior_position = Eigen::Vector3d::Zero();
+
   bool registered = false;
   Pose pose;
   std::vector<PointId> point_ids; ///< per keypoint, kInvalidId if not part of a map point
