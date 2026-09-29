@@ -13,6 +13,7 @@
 #include "sfm/incremental_mapper.h"
 #include "sfm/io.h"
 #include "sfm/matching.h"
+#include "sfm/ortho.h"
 #include "sfm/tracks.h"
 #include "sfm/two_view.h"
 
@@ -76,6 +77,8 @@ bool Pipeline::Run()
     return false;
   FinalTrackingAndBundle();
   Export();
+  if (config_.ortho.enabled)
+    GenerateOrtho();
   return true;
 }
 
@@ -260,6 +263,20 @@ void Pipeline::FinalTrackingAndBundle()
   }
   LOG(INFO) << "Final model: " << rec_.NumRegistered() << " images, " << rec_.NumPoints() << " points, mean reprojection error "
             << rec_.MeanReprojectionError() << " px";
+}
+
+void Pipeline::GenerateOrtho()
+{
+  ScopedTimer timer("6. orthophoto");
+  Orthophoto ortho;
+  if (!GenerateOrthophoto(rec_, config_.ortho, &ortho))
+  {
+    LOG(ERROR) << "Orthophoto generation failed";
+    return;
+  }
+  const std::string dir = (fs::path(config_.io.output_dir) / "ortho").string();
+  WriteOrthophoto(ortho, rec_, config_.ortho, dir);
+  LOG(INFO) << "Wrote " << dir << "/ortho.png";
 }
 
 void Pipeline::Export()

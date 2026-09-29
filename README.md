@@ -10,6 +10,7 @@ Incremental structure-from-motion, a clean reimplementation of the original pipe
 | 3. FLANN matching + ROP (5-pt E in RANSAC, decomposition, Sampson refinement) | `matching`, `two_view` | `Flann_matching`, `Initial_estimate_hybrid` |
 | 4. Incremental extrinsics + window BA | `incremental_mapper`, `rotation_averaging`, `resection`, `bundle_adjustment` | `SfM_incremental_pba`, `Single_Rotation_Averaging_RANSAC`, `Translation_Estimation_trimming`, `Edge_link_trimming`, `pba_driver` |
 | 5. Feature tracking + final BA | `tracks`, `bundle_adjustment` | `Tracking_all`, `Remove_outliers`, `pba_driver` |
+| 6. Orthophoto in the map frame (optional) | `ortho` | `Generate_Ortho` |
 
 ## Incremental SfM
 
@@ -31,6 +32,31 @@ Incremental structure-from-motion, a clean reimplementation of the original pipe
 4. **Window BA** (Ceres, Schur): the last `window` images are optimized every `interval`
    registrations, and right after a poor registration. Older cameras that see the same points
    stay fixed. A full BA runs every `global_interval` registrations.
+
+## Orthophoto
+
+Enable it with `ortho.enabled: true`. The ortho is built in the map frame, so no
+georeferencing is needed. Its plane is the map XY plane, and it is projected along map Z,
+which is the seed camera's viewing direction. For nadir drone imagery that is roughly
+straight down, and the log reports how far the mean viewing direction is from map Z.
+
+1. **DEM:** the sparse points are gridded with inverse-distance weighting
+   (`dem_neighbors: 1` gives the original nearest-point lookup). A NaN-aware 3×3 median
+   removes spikes, and cells far from any point are no-data.
+2. **Per ortho pixel:** Z comes from the DEM, and the ground point is projected into the
+   camera closest in XY. If the point falls outside that image, the next closest camera is
+   tried.
+3. **Fill:** images are loaded in batches (`image_batch`) and sampled bilinearly.
+
+Outputs are written to `<output_dir>/ortho/`:
+- `ortho.png`: BGRA, transparent where no image covers the pixel
+- `ortho_trajectory.jpg`: the ortho with camera centers and flight path drawn on top
+- `dem.tiff`: float DEM, NaN = no-data
+- `dem_preview.png`: colour-mapped DEM
+- `ortho.yaml`: pixel ↔ map transform, `X = x0 + (col + 0.5)·gsd`, `Y = y0 + (row + 0.5)·gsd`
+
+The default `gsd: 0` uses the native camera resolution. Because the DEM comes from sparse
+points, building edges show some smearing; a dense DEM would be the next step.
 
 Conventions: `x_cam = R·X + t` (world → camera), OpenCV camera frame, OpenCV pinhole model
 with `(k1, k2, p1, p2, k3)`. The ROP of a pair `(i, j)` is `x_j = R_ji·x_i + t_ji`, with `|t| = 1`.
@@ -86,6 +112,7 @@ Outputs in `output_dir`:
 
 ```bash
 python3 tools/render_synthetic.py /tmp/render --views 20   # textured box world, known poses, lens distortion
+# or: --mode nadir   (28-image drone lawnmower looking down; its config also enables the ortho)
 ./build/sfm_main /tmp/render/config.yaml
 python3 tools/evaluate_poses.py /tmp/render/gt_poses.txt /tmp/render/out/poses.txt
 ```
@@ -99,7 +126,7 @@ on an 8 m scene, final reprojection error 0.29 px, about 13 s on 20 threads.
 include/sfm/    public headers, one per stage
 src/            implementation (cost_functions.h holds the Ceres residuals)
 apps/           sfm_main
-tests/          gtest: geometry units + synthetic end-to-end incremental SfM
+tests/          gtest: geometry units, synthetic end-to-end incremental SfM, ortho vs. true texture
 tools/          renderer and pose evaluation scripts
 config/         example.yaml
 ```

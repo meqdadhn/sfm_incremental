@@ -4,7 +4,8 @@
 Writes <out>/images/*.png, <out>/gt_poses.txt (name qw qx qy qz tx ty tz, x_cam = R X + t)
 and <out>/config.yaml ready for sfm_main.
 
-    python3 tools/render_synthetic.py <out_dir> [--views 20]
+    python3 tools/render_synthetic.py <out_dir> [--views 20]          # orbit around the scene
+    python3 tools/render_synthetic.py <out_dir> --mode nadir          # drone lawnmower, looking down
 """
 import argparse
 import os
@@ -79,6 +80,31 @@ def look_at(C, target, up=np.array([0, 0, 1.0])):
     return R, -R @ C
 
 
+def nadir(C, yaw, rng):
+    """Downward-looking camera with a small random tilt; image x axis along `yaw`."""
+    z = np.array([0.0, 0.0, -1.0])
+    x = np.array([np.cos(yaw), np.sin(yaw), 0.0])
+    R = np.stack([x, np.cross(z, x), z])
+    tilt = rng.normal(0, np.radians(2.0), 3)
+    Rt, _ = cv2.Rodrigues(tilt)
+    R = Rt @ R
+    return R, -R @ C
+
+
+def nadir_centers(rng, height=10.0):
+    """Lawnmower pattern: strips along x, alternating direction (~70% overlap)."""
+    poses = []
+    for k, y in enumerate(np.arange(-4.5, 4.6, 3.0)):
+        xs = np.arange(-7.0, 7.1, 2.3)
+        if k % 2:
+            xs = xs[::-1]
+        for x in xs:
+            C = np.array([x, y, height]) + rng.normal(0, 0.15, 3)
+            yaw = (0.0 if k % 2 == 0 else np.pi) + rng.normal(0, np.radians(3))
+            poses.append(nadir(C, yaw, rng))
+    return poses
+
+
 def render(R, t, quads, textures, rays_cam):
     C = -R.T @ t
     d = rays_cam @ R  # world directions (R^T * ray), N x 3
@@ -105,6 +131,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("out")
     ap.add_argument("--views", type=int, default=20)
+    ap.add_argument("--mode", choices=["orbit", "nadir"], default="orbit")
     args = ap.parse_args()
     os.makedirs(os.path.join(args.out, "images"), exist_ok=True)
 
@@ -117,11 +144,16 @@ def main():
     rays = np.hstack([und, np.ones((len(und), 1))])
 
     rng = np.random.default_rng(0)
+    if args.mode == "nadir":
+        poses = nadir_centers(rng)
+    else:
+        poses = []
+        for i in range(args.views):
+            a = -1.0 + 2.0 * i / max(1, args.views - 1)
+            C = np.array([9.0 * np.sin(a), -9.0 * np.cos(a), 2.5 + 0.6 * np.sin(3 * a)]) + rng.normal(0, 0.2, 3)
+            poses.append(look_at(C, np.array([0.0, 0.5, 0.8]) + rng.normal(0, 0.3, 3)))
     lines = []
-    for i in range(args.views):
-        a = -1.0 + 2.0 * i / max(1, args.views - 1)
-        C = np.array([9.0 * np.sin(a), -9.0 * np.cos(a), 2.5 + 0.6 * np.sin(3 * a)]) + rng.normal(0, 0.2, 3)
-        R, t = look_at(C, np.array([0.0, 0.5, 0.8]) + rng.normal(0, 0.3, 3))
+    for i, (R, t) in enumerate(poses):
         img = render(R, t, quads, textures, rays)
         name = f"view_{i:03d}.png"
         cv2.imwrite(os.path.join(args.out, "images", name), img)
@@ -141,7 +173,12 @@ cameras:
     cx: {K[0, 2]}
     cy: {K[1, 2]}
     dist: [{', '.join(str(v) for v in DIST)}]
-""")
+""" + ("""matching:
+  mode: sequential
+  sequential_overlap: 8
+ortho:
+  enabled: true
+""" if args.mode == "nadir" else ""))
 
 
 def quat(R):
