@@ -46,12 +46,10 @@ void ReadBundle(const YAML::Node &n, BundleAdjustmentParams *p)
   Read(n, "verbose", &p->verbose);
 }
 
-Camera ReadCamera(const YAML::Node &n, const fs::path &base, bool *from_exif)
+Camera ReadCamera(const YAML::Node &n, const fs::path &base)
 {
   Camera cam;
   Read(n, "id", &cam.id);
-  *from_exif = false;
-  Read(n, "from_exif", from_exif);
   if (n["calibration_file"])
   {
     std::string k_key = "camera_matrix", d_key = "distortion_coefficients";
@@ -73,8 +71,8 @@ Camera ReadCamera(const YAML::Node &n, const fs::path &base, bool *from_exif)
     cam.dist.fill(0.0);
     std::copy(d.begin(), d.end(), cam.dist.begin());
   }
-  if (!*from_exif && (cam.fx <= 0 || cam.fy <= 0))
-    throw std::runtime_error("Camera " + std::to_string(cam.id) + " needs fx, fy > 0 (or from_exif: true)");
+  if (cam.fx <= 0 || cam.fy <= 0)
+    throw std::runtime_error("Camera " + std::to_string(cam.id) + " needs fx, fy > 0 (tools/preprocess can derive them from EXIF)");
   return cam;
 }
 } // namespace
@@ -132,15 +130,8 @@ SfmConfig LoadConfig(const std::string &path)
     throw std::runtime_error("Config needs at least one entry in cameras");
   for (const auto &n : root["cameras"])
   {
-    bool from_exif = false;
-    Camera cam = ReadCamera(n, base, &from_exif);
+    Camera cam = ReadCamera(n, base);
     cfg.cameras[cam.id] = cam;
-    if (from_exif)
-    {
-      double sensor_width = 0.0;
-      Read(n, "sensor_width_mm", &sensor_width);
-      cfg.exif_cameras[cam.id] = sensor_width;
-    }
   }
 
   const YAML::Node trj = root["trajectory"];

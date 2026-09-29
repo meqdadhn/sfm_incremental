@@ -44,8 +44,6 @@ struct SfmConfig
   std::map<CameraId, Camera> cameras;
   CameraId default_camera = 0;
   std::map<std::string, CameraId> image_cameras; ///< per-image camera overrides, by file name
-  /// Cameras whose intrinsics are read from EXIF at load time -> sensor width override in mm (0 = lookup).
-  std::map<CameraId, double> exif_cameras;
   TrajectoryParams trajectory;
 
   SiftParams sift;

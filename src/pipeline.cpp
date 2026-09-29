@@ -112,46 +112,21 @@ void Pipeline::LoadImages()
     rec_.images.push_back(std::move(image));
   }
 
-  // Preprocessing: intrinsics from EXIF for cameras configured with from_exif.
-  for (const auto &kv : config_.exif_cameras)
-  {
-    Camera &cam = rec_.cameras.at(kv.first);
-    const auto it = std::find_if(rec_.images.begin(), rec_.images.end(), [&](const Image &im) { return im.camera_id == cam.id; });
-    if (it == rec_.images.end())
-      continue;
-    ExifData exif;
-    if (!ReadExif(it->path, &exif))
-      throw std::runtime_error("Camera " + std::to_string(cam.id) + " uses from_exif but " + it->name + " has no EXIF");
-    int w = exif.width, h = exif.height;
-    if (w <= 0 || h <= 0)
-    {
-      const cv::Mat im = cv::imread(it->path, cv::IMREAD_UNCHANGED);
-      w = im.cols;
-      h = im.rows;
-    }
-    std::string method;
-    if (!CameraFromExif(exif, w, h, kv.second, &cam, &method))
-      throw std::runtime_error("Cannot derive intrinsics from the EXIF of " + it->name +
-                               " (no focal length, or unknown sensor: set sensor_width_mm)");
-    LOG(INFO) << "Camera " << cam.id << " from EXIF (" << exif.make << " " << exif.model << ", " << exif.focal_mm << " mm, " << method
-              << "): fx = fy = " << cam.fx << " px, " << w << " x " << h;
-  }
-
-  // Preprocessing: position priors (GPS or trajectory file), used by trajectory matching.
+  // Position priors (trajectory file, e.g. from tools/preprocess), used by trajectory matching.
   const int num_priors = LoadTrajectoryPriors(config_.trajectory, &rec_.images);
   if (config_.trajectory.source != "none")
   {
     LOG(INFO) << "Trajectory (" << config_.trajectory.source << "): " << num_priors << " / " << rec_.images.size() << " images with a position prior";
     fs::create_directories(config_.io.output_dir);
     std::ofstream out(fs::path(config_.io.output_dir) / "trajectory_priors.txt");
-    out << "# name X Y Z" << (config_.trajectory.source == "exif" ? "   (local ENU meters, origin at the first image)" : "") << "\n";
+    out << "# name X Y Z\n";
     out.precision(12);
     for (const Image &image : rec_.images)
       if (image.has_prior)
         out << image.name << " " << image.prior_position.transpose() << "\n";
   }
   if (config_.matching.mode == "trajectory" && num_priors < 2)
-    throw std::runtime_error("matching.mode: trajectory needs position priors (set trajectory.source to exif or file)");
+    throw std::runtime_error("matching.mode: trajectory needs position priors (trajectory.source: file; tools/preprocess writes one from GPS)");
 
   // Fill in missing camera sizes from the first image using each camera.
   for (auto &kv : rec_.cameras)

@@ -1,0 +1,14 @@
+{
+  "_comment": "Sensor width in mm, keyed by lowercase 'make model' as written in EXIF. Add your cameras here.",
+  "dji fc300s": 6.17,
+  "dji fc300x": 6.17,
+  "dji fc300c": 6.17,
+  "dji fc330": 6.17,
+  "dji fc220": 6.17,
+  "dji fc6310": 13.2,
+  "dji fc6310s": 13.2,
+  "dji fc6310r": 13.2,
+  "dji fc6510": 13.2,
+  "dji fc6520": 17.3,
+  "hasselblad l1d-20c": 13.2
+}
