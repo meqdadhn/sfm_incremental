@@ -6,7 +6,9 @@
 
 #include <gtest/gtest.h>
 
+#include "sfm/geometry.h"
 #include "sfm/matching.h"
+#include "sfm/photogrammetry.h"
 #include "sfm/priors.h"
 
 namespace sfm
@@ -52,6 +54,8 @@ TEST(Priors, TrajectoryFileOriginalFormat)
   params.file = path;
   EXPECT_EQ(LoadTrajectoryPriors(params, &images), 2);
   EXPECT_TRUE(images[1].prior_position.isApprox(Eigen::Vector3d(110, 205, 51)));
+  ASSERT_TRUE(images[1].has_prior_rotation);
+  EXPECT_TRUE(images[1].prior_rotation.isApprox(PoseFromOPK(0.0, 0.0, DegToRad(46.0), images[1].prior_position).R));
   EXPECT_FALSE(images[2].has_prior);
 
   params.source = "none";

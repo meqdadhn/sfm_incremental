@@ -1,5 +1,8 @@
 #include "sfm/priors.h"
 
+#include "sfm/geometry.h"
+#include "sfm/photogrammetry.h"
+
 #include <algorithm>
 #include <fstream>
 #include <map>
@@ -22,7 +25,7 @@ bool IsNumber(const std::string &s)
 int LoadTrajectoryPriors(const TrajectoryParams &params, std::vector<Image> *images)
 {
   for (Image &image : *images)
-    image.has_prior = false;
+    image.has_prior = image.has_prior_rotation = false;
   if (params.source == "none")
     return 0;
 
@@ -48,8 +51,12 @@ int LoadTrajectoryPriors(const TrajectoryParams &params, std::vector<Image> *ima
       {
         if (row < static_cast<int>(images->size()))
         {
-          (*images)[row].prior_position = Eigen::Vector3d(std::stod(tok[3]), std::stod(tok[4]), std::stod(tok[5]));
-          (*images)[row].has_prior = true;
+          Image &image = (*images)[row];
+          image.prior_position = Eigen::Vector3d(std::stod(tok[3]), std::stod(tok[4]), std::stod(tok[5]));
+          image.has_prior = true;
+          image.prior_rotation =
+              PoseFromOPK(DegToRad(std::stod(tok[0])), DegToRad(std::stod(tok[1])), DegToRad(std::stod(tok[2])), image.prior_position).R;
+          image.has_prior_rotation = true;
         }
         ++row;
       }

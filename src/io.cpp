@@ -10,6 +10,9 @@
 #include <glog/logging.h>
 #include <opencv2/imgcodecs.hpp>
 
+#include "sfm/geometry.h"
+#include "sfm/photogrammetry.h"
+
 namespace fs = std::filesystem;
 
 namespace sfm
@@ -287,6 +290,23 @@ void WritePoses(const Reconstruction &rec, const std::string &path)
     const Eigen::Vector3d C = image.pose.Center();
     out << image.name << " " << q.w() << " " << q.x() << " " << q.y() << " " << q.z() << " " << image.pose.t.transpose() << " "
         << C.transpose() << "\n";
+  }
+}
+
+void WriteEopsOPK(const Reconstruction &rec, const std::string &path)
+{
+  EnsureParentDir(path);
+  std::ofstream out(path);
+  out << "# name omega phi kappa [deg] X0 Y0 Z0   (R = Rx(omega)*Ry(phi)*Rz(kappa), camera -> map; photogrammetric camera frame)\n"
+      << std::setprecision(12);
+  for (const Image &image : rec.images)
+  {
+    if (!image.registered)
+      continue;
+    double o, p, k;
+    OPKFromPose(image.pose, &o, &p, &k);
+    const Eigen::Vector3d C = image.pose.Center();
+    out << image.name << "\t" << RadToDeg(o) << "\t" << RadToDeg(p) << "\t" << RadToDeg(k) << "\t" << C.x() << "\t" << C.y() << "\t" << C.z() << "\n";
   }
 }
 

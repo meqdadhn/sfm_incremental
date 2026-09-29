@@ -21,7 +21,8 @@ struct TrajectoryParams
 {
   std::string source = "none"; ///< "none" or "file"
   /// Either the original format, one "omega phi kappa X Y Z" line per image in image order
-  /// (angles in degrees), or "name X Y Z [...]" lines matched by image name ('#' starts a comment).
+  /// (degrees, R = Rx*Ry*Rz camera -> map, see photogrammetry.h; also sets the attitude prior),
+  /// or "name X Y Z [...]" lines matched by image name ('#' starts a comment).
   std::string file;
 };
 

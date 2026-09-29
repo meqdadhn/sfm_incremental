@@ -96,6 +96,17 @@ for a negligible drop in error.
 Conventions: `x_cam = R·X + t` (world → camera), OpenCV camera frame, OpenCV pinhole model
 with `(k1, k2, p1, p2, k3)`. The ROP of a pair `(i, j)` is `x_j = R_ji·x_i + t_ji`, with `|t| = 1`.
 
+The original omega-phi-kappa convention is different in three ways, and `photogrammetry.h`
+converts between the two (tested against the original `rotation_Mat` and collinearity code):
+- **Order:** `R = Rx(ω)·Ry(φ)·Rz(κ)`, not yaw-pitch-roll `Rz·Ry·Rx`.
+- **Direction:** R maps camera → mapping frame, the opposite of this code's world → camera.
+- **Camera axes:** photogrammetric frame (y up, looking along −z).
+
+The relation is `R_opk = R_cwᵀ·diag(1, −1, −1)` and `X0 = C`. It is used for the original
+trajectory format (whose attitude is kept as a prior) and for `eops_opk.txt`, which is written
+in the original `final_EOPs.txt` format. In the unlevelled map frame (Z = the seed camera's
+viewing direction, i.e. down), nadir images show ω ≈ 180°.
+
 ### Differences from the original
 
 - Translation estimation uses the maintained map points, which are triangulated from
@@ -142,6 +153,7 @@ Outputs in `output_dir`:
 - `colmap/`: COLMAP text model (open it with `colmap gui` → File → Import model)
 - `points.ply`: coloured points plus camera centers (red)
 - `poses.txt`: `name qw qx qy qz tx ty tz cx cy cz`
+- `eops_opk.txt`: `name ω φ κ [deg] X0 Y0 Z0`, in the original EOP convention
 
 ## Synthetic end-to-end check
 

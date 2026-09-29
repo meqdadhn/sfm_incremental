@@ -110,6 +110,8 @@ struct Image
 
   bool has_prior = false;           ///< position prior from GPS / trajectory file (preprocessing)
   Eigen::Vector3d prior_position = Eigen::Vector3d::Zero();
+  bool has_prior_rotation = false;  ///< attitude prior (original omega-phi-kappa trajectory format)
+  Eigen::Matrix3d prior_rotation = Eigen::Matrix3d::Identity(); ///< as Pose::R (world -> OpenCV camera)
 
   bool registered = false;
   Pose pose;
