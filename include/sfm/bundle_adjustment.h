@@ -23,7 +23,8 @@ struct BundleAdjustmentParams
   int max_iterations = 50;
   std::string loss = "huber";      ///< "huber", "cauchy" or "none"
   double loss_scale_px = 2.0;
-  bool refine_intrinsics = false;  ///< focal + distortion, shared per camera
+  bool refine_intrinsics = false;  ///< focal + distortion, shared per camera; keypoints are re-undistorted afterwards
+  bool refine_focal_length = true;  ///< with refine_intrinsics; keep false for flat nadir scenes (focal/height ambiguity)
   bool refine_principal_point = false;
   int num_threads = 0;             ///< 0 = hardware concurrency
   double function_tolerance = 1e-6;

@@ -39,6 +39,7 @@ void ReadBundle(const YAML::Node &n, BundleAdjustmentParams *p)
   Read(n, "loss", &p->loss);
   Read(n, "loss_scale_px", &p->loss_scale_px);
   Read(n, "refine_intrinsics", &p->refine_intrinsics);
+  Read(n, "refine_focal_length", &p->refine_focal_length);
   Read(n, "refine_principal_point", &p->refine_principal_point);
   Read(n, "num_threads", &p->num_threads);
   Read(n, "function_tolerance", &p->function_tolerance);

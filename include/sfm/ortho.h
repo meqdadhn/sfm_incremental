@@ -10,7 +10,7 @@
 *  1. DEM: the sparse points are gridded (cell = dem_cell_factor * gsd) with
 *     inverse-distance weighting of the k nearest points (k = 1 reproduces the
 *     original nearest-point lookup), then a 3x3 median removes spikes; cells
-*     far from any point are no-data.
+*     outside the convex hull of the points are no-data.
 *  2. For every ortho pixel, Z is interpolated from the DEM and the ground
 *     point is projected into the camera whose center is closest in XY. If it
 *     falls outside that image, the next closest camera is tried.
@@ -37,7 +37,7 @@ struct OrthoParams
   double bounds_percentile = 1.0;  ///< ortho extent = [p, 100 - p] percentiles of the points in X and Y
   double dem_cell_factor = 8.0;    ///< DEM cell size in ortho pixels
   int dem_neighbors = 8;           ///< IDW neighbours, 1 = nearest point
-  double dem_max_gap_cells = 10.0; ///< DEM cells farther than this from any point are no-data
+  double dem_max_gap_cells = 0.0;  ///< > 0: cells farther than this from any point are no-data (0 = fill the whole hull)
   bool dem_median_filter = true;   ///< 3x3 median on the DEM, removes spikes from outlier points
   int candidate_images = 8;        ///< closest cameras considered per DEM cell
   int image_border_px = 5;
