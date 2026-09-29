@@ -35,6 +35,8 @@ void WriteColmapText(const Reconstruction &reconstruction, const std::string &di
 void WritePly(const Reconstruction &reconstruction, const std::string &path);
 /// One line per registered image: name, qw qx qy qz (R_cw), tx ty tz, camera center.
 void WritePoses(const Reconstruction &reconstruction, const std::string &path);
+/// Original final_EOPs.txt format: name omega phi kappa [deg] X0 Y0 Z0 (R = Rx*Ry*Rz, camera -> map).
+void WriteEopsOPK(const Reconstruction &reconstruction, const std::string &path);
 
 } // namespace sfm
 

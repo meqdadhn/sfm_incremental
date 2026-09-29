@@ -318,7 +318,8 @@ void Pipeline::Export()
   WriteColmapText(rec_, (out / "colmap").string());
   WritePly(rec_, (out / "points.ply").string());
   WritePoses(rec_, (out / "poses.txt").string());
-  LOG(INFO) << "Wrote " << (out / "colmap").string() << ", points.ply, poses.txt";
+  WriteEopsOPK(rec_, (out / "eops_opk.txt").string());
+  LOG(INFO) << "Wrote " << (out / "colmap").string() << ", points.ply, poses.txt, eops_opk.txt";
 }
 
 } // namespace sfm
