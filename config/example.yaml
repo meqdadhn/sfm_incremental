@@ -93,6 +93,7 @@ final:
     loss: huber
     loss_scale_px: 2.0
     refine_intrinsics: false
+    refine_focal_length: true     # with refine_intrinsics; set false for flat nadir scenes (focal/height ambiguity)
     refine_principal_point: false
     num_threads: 0
     verbose: false
@@ -106,7 +107,7 @@ ortho:
   bounds_percentile: 1.0  # extent = [p, 100-p] percentiles of the points
   dem_cell_factor: 8.0    # DEM cell size in ortho pixels
   dem_neighbors: 8        # IDW neighbours, 1 = nearest point (original behaviour)
-  dem_max_gap_cells: 10.0 # no-data beyond this distance from any point
+  dem_max_gap_cells: 0.0  # > 0: no-data beyond this distance from any point; 0 = fill the convex hull
   dem_median_filter: true # 3x3 median, removes spikes from outlier points
   candidate_images: 8     # closest cameras tried per pixel
   image_border_px: 5

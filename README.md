@@ -42,7 +42,8 @@ straight down, and the log reports how far the mean viewing direction is from ma
 
 1. **DEM:** the sparse points are gridded with inverse-distance weighting
    (`dem_neighbors: 1` gives the original nearest-point lookup). A NaN-aware 3×3 median
-   removes spikes, and cells far from any point are no-data.
+   removes spikes. Everything inside the convex hull of the points is interpolated, and
+   only the outside is no-data.
 2. **Per ortho pixel:** Z comes from the DEM, and the ground point is projected into the
    camera closest in XY. If the point falls outside that image, the next closest camera is
    tried.
@@ -56,7 +57,23 @@ Outputs are written to `<output_dir>/ortho/`:
 - `ortho.yaml`: pixel ↔ map transform, `X = x0 + (col + 0.5)·gsd`, `Y = y0 + (row + 0.5)·gsd`
 
 The default `gsd: 0` uses the native camera resolution. Because the DEM comes from sparse
-points, building edges show some smearing; a dense DEM would be the next step.
+points, building edges and tree canopies show some smearing, and there is no seamline
+blending; a dense DEM and blending would be the next steps.
+
+## Real drone data: Brighton Beach
+
+```bash
+tools/download_brighton_beach.sh                        # OpenDroneMap sample, BSD-2, 18 DJI images, ~62 MB
+./build/sfm_main ~/sfm_data/brighton_beach/config.yaml   # about 20 s, ortho in out/ortho/
+```
+
+Reference result: 18/18 images registered, 0.42 px mean reprojection error, and a
+4130 × 5520 px ortho with 95% coverage. It compares well with OpenDroneMap's own ortho
+(`brighton_beach.jpg`), up to the frame rotation, since ours is not georeferenced.
+
+For flat nadir scenes, keep `refine_focal_length: false`. Focal length and flying height
+are ambiguous there: with a free focal, BA moved it from the correct 2340 px to 2740 px
+for a negligible drop in error.
 
 Conventions: `x_cam = R·X + t` (world → camera), OpenCV camera frame, OpenCV pinhole model
 with `(k1, k2, p1, p2, k3)`. The ROP of a pair `(i, j)` is `x_j = R_ji·x_i + t_ji`, with `|t| = 1`.

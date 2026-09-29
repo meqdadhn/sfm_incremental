@@ -254,12 +254,18 @@ void Pipeline::FinalTrackingAndBundle()
   for (int round = 0; round < config_.final_ba.rounds; ++round)
   {
     const BundleAdjustmentSummary summary = RunBundleAdjustment(config_.final_ba.ba, setup, &rec_);
-    if (config_.final_ba.ba.refine_intrinsics)
-      for (Image &image : rec_.images)
-        UndistortKeypoints(rec_.cameras.at(image.camera_id), &image.features);
     const int removed = rec_.FilterPoints(config_.final_ba.triangulation.max_reprojection_error_px,
                                           config_.final_ba.triangulation.min_triangulation_angle_deg);
     LOG(INFO) << "Final BA round " << round + 1 << ": " << summary.Brief() << ", filtered " << removed << " observations";
+  }
+  if (config_.final_ba.ba.refine_intrinsics)
+  {
+    for (const auto &kv : rec_.cameras)
+    {
+      const Camera &c = kv.second;
+      LOG(INFO) << "Refined camera " << c.id << ": fx " << c.fx << " fy " << c.fy << " cx " << c.cx << " cy " << c.cy << " dist [" << c.dist[0]
+                << ", " << c.dist[1] << ", " << c.dist[2] << ", " << c.dist[3] << ", " << c.dist[4] << "]";
+    }
   }
   LOG(INFO) << "Final model: " << rec_.NumRegistered() << " images, " << rec_.NumPoints() << " points, mean reprojection error "
             << rec_.MeanReprojectionError() << " px";

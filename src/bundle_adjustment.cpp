@@ -10,6 +10,7 @@
 #include <glog/logging.h>
 
 #include "cost_functions.h"
+#include "sfm/features.h"
 
 namespace sfm
 {
@@ -157,10 +158,15 @@ BundleAdjustmentSummary RunBundleAdjustment(const BundleAdjustmentParams &params
 
   for (auto &kv : intrinsics)
   {
+    std::vector<int> fixed;
+    if (!params.refine_focal_length)
+      fixed.insert(fixed.end(), {0, 1});
+    if (!params.refine_principal_point)
+      fixed.insert(fixed.end(), {2, 3});
     if (!params.refine_intrinsics)
       problem.SetParameterBlockConstant(kv.second.data());
-    else if (!params.refine_principal_point)
-      problem.SetParameterization(kv.second.data(), new ceres::SubsetParameterization(9, {2, 3}));
+    else if (!fixed.empty())
+      problem.SetParameterization(kv.second.data(), new ceres::SubsetParameterization(9, fixed));
   }
 
   ceres::Solver::Options options;
@@ -189,8 +195,14 @@ BundleAdjustmentSummary RunBundleAdjustment(const BundleAdjustmentParams &params
     for (const auto &kv : points)
       rec->Point(kv.first).X = Eigen::Vector3d(kv.second[0], kv.second[1], kv.second[2]);
     if (params.refine_intrinsics)
+    {
       for (const auto &kv : intrinsics)
         SetIntrinsics(kv.second, &rec->cameras.at(kv.first));
+      // Normalized coordinates depend on the intrinsics: refresh them before anything measures errors.
+      for (Image &image : rec->images)
+        if (intrinsics.count(image.camera_id))
+          UndistortKeypoints(rec->cameras.at(image.camera_id), &image.features);
+    }
   }
   out.final_rms_px = RmsError(*rec, point_ids);
   out.time_s = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();

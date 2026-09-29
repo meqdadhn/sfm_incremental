@@ -179,11 +179,16 @@ bool GenerateOrthophoto(const Reconstruction &rec, const OrthoParams &params, Or
   cv::Mat indices, dists;
   kdtree.knnSearch(queries, indices, dists, k, cv::flann::SearchParams(64));
   ortho->dem.create(dem_h, dem_w, CV_32F);
-  const float max_gap2 = static_cast<float>(std::pow(params.dem_max_gap_cells * cell, 2));
+  // Interpolate inside the convex hull of the points (sparse points leave gaps on roads, lawns, ...).
+  std::vector<cv::Point2f> hull;
+  cv::convexHull(xy, hull);
+  const float max_gap2 = params.dem_max_gap_cells > 0 ? static_cast<float>(std::pow(params.dem_max_gap_cells * cell, 2))
+                                                      : std::numeric_limits<float>::max();
   for (int q = 0; q < dem_w * dem_h; ++q)
   {
     float &out = ortho->dem.at<float>(q / dem_w, q % dem_w);
-    if (dists.at<float>(q, 0) > max_gap2)
+    const cv::Point2f center(queries.at<float>(q, 0), queries.at<float>(q, 1));
+    if (dists.at<float>(q, 0) > max_gap2 || cv::pointPolygonTest(hull, center, false) < 0)
     {
       out = std::numeric_limits<float>::quiet_NaN();
       continue;
