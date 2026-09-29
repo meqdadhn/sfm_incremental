@@ -1,0 +1,98 @@
+# SfM configuration. Relative paths are resolved against this file's directory.
+# Every block except io and cameras is optional; the values below are the defaults.
+
+io:
+  image_dir: /path/to/images
+  images: []              # optional explicit list (file names in image_dir); empty = all images
+  output_dir: ../output
+  # cache_dir: ../output/cache   # features + ROPs, invalidated automatically when parameters change
+  use_cache: true
+
+# OpenCV pinhole model with (k1, k2, p1, p2, k3). Intrinsics are assumed calibrated.
+cameras:
+  - id: 0
+    fx: 1000.0
+    fy: 1000.0
+    cx: 960.0
+    cy: 540.0
+    dist: [0.0, 0.0, 0.0, 0.0, 0.0]
+    # width / height are read from the first image if omitted
+  # - id: 1
+  #   calibration_file: calib/cam1.yml       # OpenCV FileStorage file
+  #   camera_matrix_key: camera_matrix       # node names inside the file
+  #   distortion_key: distortion_coefficients
+
+default_camera: 0
+image_cameras: {}         # per-image overrides, e.g. {img_0001.png: 1}
+
+features:
+  max_features: 8000
+  octave_layers: 3
+  contrast_threshold: 0.02
+  edge_threshold: 10.0
+  sigma: 1.6
+  max_image_dim: 3200
+  root_sift: true
+
+matching:
+  mode: exhaustive        # exhaustive | sequential
+  sequential_overlap: 10
+  ratio: 0.8
+  cross_check: true
+  flann_trees: 4
+  flann_checks: 128
+  min_matches: 30
+
+two_view:                 # relative orientation: 5-point E in RANSAC + Sampson refinement
+  ransac_threshold_px: 1.5
+  confidence: 0.999
+  min_inliers: 30
+  refine: true
+  refine_loss_px: 1.0
+  homography_threshold_px: 3.0
+
+incremental:
+  seed:
+    min_triangulation_angle_deg: 3.0
+    max_homography_ratio: 0.8
+    min_points: 100
+    max_trials: 20
+  rotation_averaging:     # single rotation averaging with RANSAC
+    inlier_threshold_deg: 2.0
+    max_iterations: 100
+    confidence: 0.99
+    min_inliers: 2
+  resection:              # position with fixed rotation, least trimmed squares
+    min_correspondences: 10
+    trim_trigger_px: 10.0
+    trim_ratio: 0.95
+    max_error_px: 4.0
+    refine_pose: true
+    refine_loss_px: 2.0
+  accept_score_px: 5.0          # >= 2 connections
+  accept_score_single_px: 20.0  # single-connection fallback
+  triangulation:
+    max_reprojection_error_px: 4.0
+    min_triangulation_angle_deg: 1.5
+  window_ba:
+    window: 20            # most recent images optimized
+    interval: 5           # every N registrations
+    global_interval: 50   # full BA every N registrations, 0 = off
+    max_iterations: 50
+    loss: huber
+    loss_scale_px: 2.0
+
+final:
+  min_track_length: 2
+  rounds: 2
+  triangulation:
+    max_reprojection_error_px: 4.0
+    min_triangulation_angle_deg: 1.5
+  ba:
+    max_iterations: 50
+    loss: huber
+    loss_scale_px: 2.0
+    refine_intrinsics: false
+    refine_principal_point: false
+    num_threads: 0
+    verbose: false
