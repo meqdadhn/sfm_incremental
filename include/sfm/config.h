@@ -14,6 +14,7 @@
 #include "sfm/features.h"
 #include "sfm/incremental_mapper.h"
 #include "sfm/matching.h"
+#include "sfm/ortho.h"
 #include "sfm/triangulation.h"
 #include "sfm/two_view.h"
 
@@ -48,6 +49,7 @@ struct SfmConfig
   TwoViewParams two_view;
   IncrementalParams incremental;
   FinalParams final_ba;
+  OrthoParams ortho;
 };
 
 /// Parses the YAML file. Relative paths are resolved against the file's directory.

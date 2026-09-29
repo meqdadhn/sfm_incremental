@@ -6,6 +6,7 @@
 *            3. matching + ROP (essential matrix) per pair
 *            4. incremental extrinsic estimation with window BA
 *            5. feature tracking + final BA
+*            6. orthophoto in the map frame (optional)
 *******************************************************************************/
 
 #ifndef SFM_PIPELINE_H_
@@ -29,6 +30,7 @@ public:
   void MatchAndEstimateRops();
   bool RunIncremental();
   void FinalTrackingAndBundle();
+  void GenerateOrtho();
   void Export();
 
   const Reconstruction &GetReconstruction() const { return rec_; }

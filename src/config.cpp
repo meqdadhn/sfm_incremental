@@ -205,6 +205,20 @@ SfmConfig LoadConfig(const std::string &path)
     ReadTriangulation(fin["triangulation"], &cfg.final_ba.triangulation);
     ReadBundle(fin["ba"], &cfg.final_ba.ba);
   }
+
+  const YAML::Node o = root["ortho"];
+  Read(o, "enabled", &cfg.ortho.enabled);
+  Read(o, "gsd", &cfg.ortho.gsd);
+  Read(o, "max_dimension", &cfg.ortho.max_dimension);
+  Read(o, "bounds_percentile", &cfg.ortho.bounds_percentile);
+  Read(o, "dem_cell_factor", &cfg.ortho.dem_cell_factor);
+  Read(o, "dem_neighbors", &cfg.ortho.dem_neighbors);
+  Read(o, "dem_max_gap_cells", &cfg.ortho.dem_max_gap_cells);
+  Read(o, "dem_median_filter", &cfg.ortho.dem_median_filter);
+  Read(o, "candidate_images", &cfg.ortho.candidate_images);
+  Read(o, "image_border_px", &cfg.ortho.image_border_px);
+  Read(o, "image_batch", &cfg.ortho.image_batch);
+  Read(o, "draw_trajectory", &cfg.ortho.draw_trajectory);
   return cfg;
 }
 

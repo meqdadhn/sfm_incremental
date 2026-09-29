@@ -96,3 +96,19 @@ final:
     refine_principal_point: false
     num_threads: 0
     verbose: false
+
+# Orthophoto in the map frame (no georeferencing): projected along map Z, the seed camera's
+# viewing direction, so it is meant for nadir (downward-looking) drone imagery.
+ortho:
+  enabled: false
+  gsd: 0.0                # map units per pixel, 0 = native camera resolution
+  max_dimension: 8000     # gsd grows if the ortho would be larger
+  bounds_percentile: 1.0  # extent = [p, 100-p] percentiles of the points
+  dem_cell_factor: 8.0    # DEM cell size in ortho pixels
+  dem_neighbors: 8        # IDW neighbours, 1 = nearest point (original behaviour)
+  dem_max_gap_cells: 10.0 # no-data beyond this distance from any point
+  dem_median_filter: true # 3x3 median, removes spikes from outlier points
+  candidate_images: 8     # closest cameras tried per pixel
+  image_border_px: 5
+  image_batch: 32         # images in memory at once
+  draw_trajectory: true
