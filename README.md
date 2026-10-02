@@ -146,8 +146,10 @@ implementation (`src/features/sift_impl.cpp`). CMake prints which one it chose.
 ```
 
 Only `io` and `cameras` are required in the config; see `config/example.yaml` for every
-parameter and its default. Features and ROPs are cached in `<output_dir>/cache`, and the
-cache is invalidated automatically when the parameters that produced it change.
+parameter and its default. Features, ROPs and the incremental SfM result (poses, cameras, seed
+pair) are cached in `<output_dir>/cache`, and each cache is invalidated automatically when the
+parameters that produced it change. Tuning `final` or `ortho` settings therefore reruns only
+the final stages.
 
 Outputs in `output_dir`:
 - `colmap/`: COLMAP text model (open it with `colmap gui` → File → Import model)

@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>sfm Pipeline::Run Flow</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: one reading column; two flowcharts, then a step-by-step reference table. */
+:root {
+  --bg: #f6f7f9; --surface: #ffffff; --fg: #1b2230; --muted: #5a6475;
+  --line: #d9dee6; --accent: #1f6feb; --code-bg: #eef1f5;
+  --sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #12161d; --surface: #191f28; --fg: #e3e8ef; --muted: #9aa5b5;
+  --line: #2c3542; --accent: #6ea8ff; --code-bg: #222a35; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #12161d; --surface: #191f28; --fg: #e3e8ef; --muted: #9aa5b5;
+  --line: #2c3542; --accent: #6ea8ff; --code-bg: #222a35; color-scheme: dark }
+
+body { background: var(--bg); color: var(--fg); font: 15px/1.6 var(--sans); padding: 32px 16px 64px; }
+main { max-width: 980px; margin: 0 auto; display: grid; gap: 36px; }
+h1 { font-size: 1.75rem; margin: 0 0 6px; text-wrap: balance; font-weight: 600; }
+h2 { font-size: 1.2rem; margin: 0 0 6px; font-weight: 600; text-wrap: balance; }
+p { margin: 0; max-width: 68ch; color: var(--muted); }
+code { font-family: var(--mono); font-size: .88em; background: var(--code-bg); padding: 1px 5px; border-radius: 4px; color: var(--fg); }
+.eyebrow { font: 500 .72rem/1 var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--accent); margin-bottom: 10px; }
+section { display: grid; gap: 14px; min-width: 0; }
+.diagram { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 20px 12px; overflow-x: auto; }
+.diagram pre.mermaid { margin: 0; display: flex; justify-content: center; background: transparent; }
+.legend { display: flex; flex-wrap: wrap; gap: 8px 22px; font-size: .85rem; color: var(--muted); }
+.legend span b { font-family: var(--mono); font-weight: 500; color: var(--fg); margin-right: 6px; }
+.table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; min-width: 760px; font-size: .88rem; }
+th, td { text-align: left; vertical-align: top; padding: 10px 14px; border-bottom: 1px solid var(--line); }
+th { font: 500 .72rem/1.2 var(--mono); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+tr:last-child td { border-bottom: 0; }
+td:first-child { font-family: var(--mono); font-size: .82rem; white-space: nowrap; color: var(--accent); }
+td ul { margin: 0; padding-left: 18px; }
+.note { font-size: .88rem; }
+</style>
+</head>
+<body>
+
+<main>
+  <header>
+    <div class="eyebrow">src/pipeline.cpp · apps/sfm_main.cpp</div>
+    <h1>Pipeline::Run, step by step</h1>
+    <p>How <code>sfm_main config.yaml</code> turns images into poses, a point cloud and an orthophoto. Rectangles are functions; slanted boxes are the data each function hands to the next; cylinders are on-disk caches.</p>
+  </header>
+
+  <section>
+    <h2>Top level: Pipeline::Run()</h2>
+    <div class="diagram">
+<pre class="mermaid">
+flowchart TD
+  CFG[/"config.yaml"/] --> LC["sfm_main: LoadConfig()"]
+  LC --> SC[/"SfmConfig"/]
+  SC --> RUN(["Pipeline::Run()"])
+  RUN --> L["1 · LoadImages()<br>ListImages, LoadTrajectoryPriors,<br>imread to fill camera width/height"]
+  L --> D1[/"rec_.images: id, name, path, camera_id, GPS prior<br>rec_.cameras: intrinsics + image size"/]
+  L -.-> TP[/"output/trajectory_priors.txt"/]
+  D1 --> F["2 · ExtractFeatures()  (OpenMP per image)<br>imread gray → ExtractSift → UndistortKeypoints"]
+  F <-.-> C1[("cache/features/*.sift")]
+  F --> D2[/"per image: keypoints, descriptors,<br>undistorted normalized coords"/]
+  D2 --> M["3 · MatchAndEstimateRops()  (OpenMP per pair)<br>SelectPairs → MatchDescriptors →<br>EstimateTwoViewGeometry (essential matrix RANSAC)"]
+  M <-.-> C2[("cache/rops.bin")]
+  M --> D3[/"view_graph_: verified pairs with<br>inlier matches + relative R, t<br>(descriptors released)"/]
+  D3 --> I{"4 · RunIncremental()<br>IncrementalMapper::Run()"}
+  I -- "no seed pair" --> FAIL(["return false → exit 2"])
+  I -- ok --> D4[/"registered image poses, sparse 3D points,<br>seed1_ / seed2_ (gauge)"/]
+  D4 --> T["5 · FinalTrackingAndBundle()<br>BuildTracks → TriangulateTracks →<br>N × (RunBundleAdjustment + FilterPoints)"]
+  T --> D5[/"refined poses, points,<br>optionally refined intrinsics"/]
+  D5 --> E["Export()<br>ColorizePoints → WriteColmapText,<br>WritePly, WritePoses, WriteEopsOPK"]
+  E --> O1[/"output/colmap/, points.ply,<br>poses.txt, eops_opk.txt"/]
+  O1 --> Q{"ortho.enabled?"}
+  Q -- yes --> G["6 · GenerateOrtho()<br>GenerateOrthophoto → WriteOrthophoto"]
+  G --> O2[/"output/ortho/ortho.png"/]
+  O2 --> DONE(["return true → exit 0"])
+  Q -- no --> DONE
+</pre>
+    </div>
+    <div class="legend">
+      <span><b>▭</b>function</span>
+      <span><b>▱</b>data passed on / file written</span>
+      <span><b>⛁</b>cache (keyed by a hash of the relevant config)</span>
+      <span><b>◇</b>branch</span>
+    </div>
+    <p class="note">Note the order in <code>Run()</code>: <code>Export()</code> runs before <code>GenerateOrtho()</code>, so the reconstruction files are written even if the orthophoto fails.</p>
+  </section>
+
+  <section>
+    <h2>Inside step 4: IncrementalMapper::Run()</h2>
+    <p>Grows the model one image at a time from a seed pair, with periodic bundle adjustment. Lives in <code>src/incremental_mapper.cpp</code>.</p>
+    <div class="diagram">
+<pre class="mermaid">
+flowchart TD
+  S(["IncrementalMapper::Run()"]) --> IN["Initialize()<br>rank images by number of verified neighbors,<br>neighbors by inlier count"]
+  IN --> SP{"next candidate pair passes?<br>triangulation angle ≥ seed_min<br>homography ratio ≤ seed_max"}
+  SP -- "no, try next" --> SP
+  SP -- yes --> IFP["InitializeFromPair(a, b)<br>a = identity, b = relative pose (baseline 1)<br>triangulate inlier matches"]
+  IFP -- "fails, try next pair" --> SP
+  SP -- "seed_max_trials reached" --> NF(["return false"])
+  IFP -- ok --> RNI["RegisterNextImage()"]
+  RNI --> CAND["Candidates()<br>unregistered images linked to registered ones"]
+  CAND --> HAS{"any candidates?"}
+  HAS -- no --> FIN
+  HAS -- yes --> P1["Pass 1: TryRegisterMulti()<br>images with ≥ 2 registered neighbors<br>rotation averaging + Resect()"]
+  P1 -- "registered" --> ADD
+  P1 -- "all failed (marked failed_)" --> P2["Pass 2: TryRegisterSingle()<br>one reference image, keep best score"]
+  P2 -- "best score found" --> ADD
+  P2 -- none --> FIN
+  ADD["AddImage()<br>add 2D–3D observations of inliers<br>TriangulateImage() with registered neighbors"] --> BA{"bundle adjustment due?"}
+  BA -- "every global_ba_interval" --> GBA["GlobalBundleAdjustment()<br>all registered images + FilterPoints"]
+  BA -- "every ba_interval" --> WBA["WindowBundleAdjustment()<br>last ba_window images + FilterPoints"]
+  BA -- "not yet" --> RNI
+  GBA --> RNI
+  WBA --> RNI
+  FIN["final WindowBundleAdjustment()<br>if images were added since the last BA"] --> OK(["return true"])
+</pre>
+    </div>
+    <p class="note">An image that failed registration gets another chance as soon as an image it overlaps with is registered. A poor single-connection registration forces a window BA right away.</p>
+  </section>
+
+  <section>
+    <h2>Each step: input, work, output</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Function</th><th>Reads</th><th>Does</th><th>Produces</th></tr></thead>
+        <tbody>
+          <tr><td>LoadImages()</td>
+            <td><code>io.image_dir</code> or <code>io.images</code>, <code>cameras</code>, <code>image_cameras</code>, <code>trajectory</code></td>
+            <td><ul><li>Builds one <code>Image</code> per file and assigns its camera</li><li>Loads GPS position priors (required for <code>matching.mode: trajectory</code>)</li><li>Reads the first image of each camera to fill missing width/height</li></ul></td>
+            <td><code>rec_.images</code>, <code>rec_.cameras</code>, <code>trajectory_priors.txt</code></td></tr>
+          <tr><td>ExtractFeatures()</td>
+            <td>image files, <code>sift</code> params</td>
+            <td><ul><li>Loads cached features if the SIFT-param hash matches</li><li>Otherwise reads grayscale and runs <code>ExtractSift</code>, then saves cache</li><li><code>UndistortKeypoints</code> with the image's camera</li></ul></td>
+            <td><code>image.features</code> (keypoints, descriptors, normalized), empty <code>point_ids</code></td></tr>
+          <tr><td>MatchAndEstimateRops()</td>
+            <td>features, <code>matching</code>, <code>two_view</code>, priors</td>
+            <td><ul><li><code>SelectPairs</code>: sequential, exhaustive or trajectory-based</li><li><code>MatchDescriptors</code> (FLANN + ratio test, optional cross-check)</li><li>If ≥ <code>min_matches</code>: <code>EstimateTwoViewGeometry</code> (essential matrix, relative pose, inliers)</li></ul></td>
+            <td><code>view_graph_</code>, <code>cache/rops.bin</code>; descriptors freed</td></tr>
+          <tr><td>RunIncremental()</td>
+            <td><code>view_graph_</code>, <code>incremental</code></td>
+            <td><ul><li>Seed pair, then register images one by one (see chart above)</li><li>Window / global BA along the way</li></ul></td>
+            <td>poses of registered images, 3D points, <code>seed1_</code>/<code>seed2_</code></td></tr>
+          <tr><td>FinalTrackingAndBundle()</td>
+            <td>registered images, <code>view_graph_</code>, <code>final_ba</code></td>
+            <td><ul><li><code>BuildTracks</code> across all registered images (≥ <code>min_track_length</code>)</li><li><code>TriangulateTracks</code></li><li><code>rounds</code> × BA (seeds fix the gauge) + outlier filtering</li></ul></td>
+            <td>final poses, points, refined intrinsics if enabled</td></tr>
+          <tr><td>Export()</td>
+            <td><code>rec_</code>, <code>io.output_dir</code></td>
+            <td><ul><li><code>ColorizePoints</code></li><li>Writes COLMAP text model, PLY, poses, omega-phi-kappa EOPs</li></ul></td>
+            <td><code>colmap/</code>, <code>points.ply</code>, <code>poses.txt</code>, <code>eops_opk.txt</code></td></tr>
+          <tr><td>GenerateOrtho()</td>
+            <td><code>rec_</code>, <code>ortho</code> (only if <code>ortho.enabled</code>)</td>
+            <td><ul><li><code>GenerateOrthophoto</code> in the map frame</li><li><code>WriteOrthophoto</code></li></ul></td>
+            <td><code>ortho/ortho.png</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js"></script>
+<script>
+  mermaid.initialize({ startOnLoad: true, theme: matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "default" });
+</script>
+</body>
+</html>

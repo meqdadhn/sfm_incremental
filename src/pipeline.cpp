@@ -72,6 +72,30 @@ uint64_t RopHash(const SfmConfig &c, const std::vector<Image> &images)
   }
   return std::hash<std::string>()(ss.str());
 }
+
+void HashBundleAdjustment(std::ostringstream &ss, const BundleAdjustmentParams &p)
+{
+  // num_threads and verbose do not change the result.
+  ss << "|" << p.max_iterations << "|" << p.loss << "|" << p.loss_scale_px << "|" << p.refine_intrinsics << "|" << p.refine_focal_length << "|"
+     << p.refine_principal_point << "|" << p.function_tolerance;
+}
+
+/// Everything incremental SfM depends on: the ROP inputs plus every IncrementalParams field.
+/// Keep in sync with IncrementalParams, a missing field reuses stale results.
+uint64_t IncrementalHash(const SfmConfig &c, const std::vector<Image> &images)
+{
+  const IncrementalParams &p = c.incremental;
+  std::ostringstream ss;
+  ss.precision(17);
+  ss << RopHash(c, images) << "|" << p.seed_min_triangulation_angle_deg << "|" << p.seed_max_homography_ratio << "|" << p.seed_min_points << "|"
+     << p.seed_max_trials << "|" << p.rotation.inlier_threshold_deg << "|" << p.rotation.max_iterations << "|" << p.rotation.confidence << "|"
+     << p.rotation.min_inliers << "|" << p.resection.min_correspondences << "|" << p.resection.trim_trigger_px << "|" << p.resection.trim_ratio
+     << "|" << p.resection.max_error_px << "|" << p.resection.refine_pose << "|" << p.resection.refine_loss_px << "|" << p.accept_score_px << "|"
+     << p.accept_score_single_px << "|" << p.triangulation.max_reprojection_error_px << "|" << p.triangulation.min_triangulation_angle_deg << "|"
+     << p.ba_window << "|" << p.ba_interval << "|" << p.global_ba_interval;
+  HashBundleAdjustment(ss, p.ba);
+  return std::hash<std::string>()(ss.str());
+}
 } // namespace
 
 Pipeline::Pipeline(SfmConfig config) : config_(std::move(config)) {}
@@ -253,11 +277,26 @@ void Pipeline::MatchAndEstimateRops()
 bool Pipeline::RunIncremental()
 {
   ScopedTimer timer("4. incremental SfM");
+  const uint64_t hash = IncrementalHash(config_, rec_.images);
+  const std::string cache_file = (fs::path(config_.io.cache_dir) / "incremental.bin").string();
+
+  if (config_.io.use_cache && LoadIncremental(cache_file, hash, &rec_, &seed1_, &seed2_))
+  {
+    // Window BA may have refined the cameras, and normalized coordinates depend on them.
+    if (config_.incremental.ba.refine_intrinsics)
+      for (Image &image : rec_.images)
+        UndistortKeypoints(rec_.cameras.at(image.camera_id), &image.features);
+    LOG(INFO) << "Incremental SfM loaded from cache: " << rec_.NumRegistered() << " / " << rec_.images.size() << " images registered";
+    return true;
+  }
+
   IncrementalMapper mapper(config_.incremental, view_graph_, &rec_);
   if (!mapper.Run())
     return false;
   seed1_ = mapper.SeedImage1();
   seed2_ = mapper.SeedImage2();
+  if (config_.io.use_cache)
+    SaveIncremental(cache_file, hash, rec_, seed1_, seed2_);
   return true;
 }
 
