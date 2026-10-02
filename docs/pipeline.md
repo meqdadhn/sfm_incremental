@@ -4,6 +4,47 @@ The full pipeline, from raw images to the outputs: Python preprocessing first, t
 `sfm_main`, which runs `Pipeline::Run()` (`src/pipeline.cpp`). The incremental loop in
 stage 4 is `IncrementalMapper` (`src/incremental_mapper.cpp`).
 
+Rendered images: [`pipeline_overview.png`](pipeline_overview.png), [`pipeline.png`](pipeline.png)
+and [`pipeline.svg`](pipeline.svg). After editing a chart, regenerate them with:
+
+```bash
+npx -y @mermaid-js/mermaid-cli -i docs/pipeline.md -o /tmp/pipeline.png -s 3 -b white
+mv /tmp/pipeline-1.png docs/pipeline_overview.png && mv /tmp/pipeline-2.png docs/pipeline.png
+npx -y @mermaid-js/mermaid-cli -i docs/pipeline.md -o /tmp/pipeline.svg -b white && mv /tmp/pipeline-2.svg docs/pipeline.svg
+```
+
+## Overview
+
+```mermaid
+flowchart LR
+    A["0 · Preprocess<br/>EXIF, GPS, cameras<br/>config.yaml"] --> B["1 · Load<br/>images + priors"]
+    B --> C["2 · SIFT<br/>cached"]
+    C --> D["3 · Match + ROP<br/>view graph, cached"]
+    D --> E["4 · Incremental SfM<br/>seed → register → triangulate<br/>window / global BA"]
+    E --> F["5 · Tracks<br/>+ final BA"]
+    F --> G["Export<br/>colmap, ply, poses, OPK"]
+    G --> H["6 · Orthophoto<br/>optional"]
+
+    classDef pre   fill:#ede7f6,stroke:#5e35b1,color:#1a1a1a
+    classDef load  fill:#e3f2fd,stroke:#1e88e5,color:#1a1a1a
+    classDef sift  fill:#e0f7fa,stroke:#00897b,color:#1a1a1a
+    classDef match fill:#e8f5e9,stroke:#43a047,color:#1a1a1a
+    classDef incr  fill:#fff8e1,stroke:#f9a825,color:#1a1a1a
+    classDef final fill:#fce4ec,stroke:#d81b60,color:#1a1a1a
+    classDef out   fill:#eceff1,stroke:#546e7a,color:#1a1a1a
+    classDef ortho fill:#f1f8e9,stroke:#7cb342,color:#1a1a1a
+    class A pre
+    class B load
+    class C sift
+    class D match
+    class E incr
+    class F final
+    class G out
+    class H ortho
+```
+
+## Full flowchart
+
 ```mermaid
 flowchart TD
     %% ---------- Stage 0: preprocessing (Python) ----------
@@ -194,9 +235,11 @@ flowchart TD
 
 ## Notes
 
-- Only stages 2 and 3 are cached. The cache key covers the SIFT and matching parameters, the
-  cameras and the image list (plus the GPS priors in trajectory mode), so changing incremental,
-  BA or ortho settings reuses the cached features and ROPs.
+- Stages 2, 3 and 4 are cached. The features and ROP key covers the SIFT and matching parameters,
+  the cameras and the image list (plus the GPS priors in trajectory mode). The incremental key
+  (`cache/incremental.bin`: registered flag and pose per image, cameras, seed pair) adds every
+  `incremental` parameter, so changing `final` or `ortho` settings reruns only stages 5 and 6.
+  Points are not cached, since stage 5 re-triangulates them from tracks.
 - A seed failure is the only case where `Run()` returns false (exit code 2). Any exception,
   such as an unreadable image or trajectory matching without priors, gives exit code 1.
 - Images that never register are logged at the end of stage 4 and left out of stages 5 and 6.

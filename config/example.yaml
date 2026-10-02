@@ -5,7 +5,7 @@ io:
   image_dir: /path/to/images
   images: []              # optional explicit list (file names in image_dir); empty = all images
   output_dir: ../output
-  # cache_dir: ../output/cache   # features + ROPs, invalidated automatically when parameters change
+  # cache_dir: ../output/cache   # features, ROPs, incremental poses; invalidated automatically when parameters change
   use_cache: true
 
 # OpenCV pinhole model with (k1, k2, p1, p2, k3). Intrinsics are assumed calibrated.
