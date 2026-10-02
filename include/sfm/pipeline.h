@@ -25,6 +25,11 @@ public:
 
   bool Run();
 
+  const Reconstruction &GetReconstruction() const { return rec_; }
+  const ViewGraph &GetViewGraph() const { return view_graph_; }
+
+private:
+  // Stages of Run(), in call order. Each relies on the state left by the previous ones.
   void LoadImages();
   void ExtractFeatures();
   void MatchAndEstimateRops();
@@ -33,11 +38,6 @@ public:
   void GenerateOrtho();
   void Export();
 
-  const Reconstruction &GetReconstruction() const { return rec_; }
-  Reconstruction &GetReconstruction() { return rec_; }
-  const ViewGraph &GetViewGraph() const { return view_graph_; }
-
-private:
   SfmConfig config_;
   Reconstruction rec_;
   ViewGraph view_graph_;

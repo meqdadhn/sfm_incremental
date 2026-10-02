@@ -21,6 +21,7 @@ namespace
 {
 constexpr uint32_t kFeaturesMagic = 0x53464654; // "SFFT"
 constexpr uint32_t kViewGraphMagic = 0x53465647; // "SFVG"
+constexpr uint32_t kIncrementalMagic = 0x53464943; // "SFIC"
 
 template <typename T>
 void Put(std::ofstream &out, const T &v)
@@ -160,6 +161,92 @@ void SaveViewGraph(const std::string &path, uint64_t hash, const ViewGraph &view
       Put(out, static_cast<int32_t>(m.idx1));
       Put(out, static_cast<int32_t>(m.idx2));
     }
+  }
+}
+
+bool LoadIncremental(const std::string &path, uint64_t hash, Reconstruction *rec, ImageId *seed1, ImageId *seed2)
+{
+  std::ifstream in(path, std::ios::binary);
+  uint32_t magic = 0;
+  uint64_t file_hash = 0;
+  int32_t n_images = 0, s1 = 0, s2 = 0;
+  if (!in || !Get(in, &magic) || magic != kIncrementalMagic || !Get(in, &file_hash) || file_hash != hash || !Get(in, &n_images) ||
+      n_images != static_cast<int32_t>(rec->images.size()) || !Get(in, &s1) || !Get(in, &s2) || s1 < 0 || s1 >= n_images || s2 < 0 ||
+      s2 >= n_images)
+    return false;
+
+  // Read everything first, so a truncated or mismatching file leaves the reconstruction as it was.
+  std::vector<char> registered(n_images);
+  std::vector<Pose> poses(n_images);
+  for (int i = 0; i < n_images; ++i)
+  {
+    uint32_t len = 0;
+    if (!Get(in, &len) || len > 4096)
+      return false;
+    std::string name(len, '\0');
+    double R[9], t[3];
+    if (!in.read(name.data(), len) || name != rec->images[i].name || !Get(in, &registered[i]) || !Get(in, &R) || !Get(in, &t))
+      return false;
+    poses[i].R = Eigen::Map<Eigen::Matrix3d>(R);
+    poses[i].t = Eigen::Map<Eigen::Vector3d>(t);
+  }
+
+  int32_t n_cams = 0;
+  if (!Get(in, &n_cams) || n_cams != static_cast<int32_t>(rec->cameras.size()))
+    return false;
+  std::map<CameraId, Camera> cameras = rec->cameras;
+  for (int c = 0; c < n_cams; ++c)
+  {
+    int32_t id = 0;
+    double v[4];
+    std::array<double, 5> dist;
+    if (!Get(in, &id) || !cameras.count(id) || !Get(in, &v) || !Get(in, &dist))
+      return false;
+    Camera &cam = cameras.at(id);
+    cam.fx = v[0];
+    cam.fy = v[1];
+    cam.cx = v[2];
+    cam.cy = v[3];
+    cam.dist = dist;
+  }
+
+  rec->ClearPoints();
+  rec->cameras = std::move(cameras);
+  for (int i = 0; i < n_images; ++i)
+  {
+    rec->images[i].registered = registered[i];
+    rec->images[i].pose = poses[i];
+  }
+  *seed1 = s1;
+  *seed2 = s2;
+  return true;
+}
+
+void SaveIncremental(const std::string &path, uint64_t hash, const Reconstruction &rec, ImageId seed1, ImageId seed2)
+{
+  EnsureParentDir(path);
+  std::ofstream out(path, std::ios::binary);
+  Put(out, kIncrementalMagic);
+  Put(out, hash);
+  Put(out, static_cast<int32_t>(rec.images.size()));
+  Put(out, static_cast<int32_t>(seed1));
+  Put(out, static_cast<int32_t>(seed2));
+  for (const Image &image : rec.images)
+  {
+    Put(out, static_cast<uint32_t>(image.name.size()));
+    out.write(image.name.data(), static_cast<std::streamsize>(image.name.size()));
+    Put(out, static_cast<char>(image.registered));
+    out.write(reinterpret_cast<const char *>(image.pose.R.data()), 9 * sizeof(double));
+    out.write(reinterpret_cast<const char *>(image.pose.t.data()), 3 * sizeof(double));
+  }
+  Put(out, static_cast<int32_t>(rec.cameras.size()));
+  for (const auto &kv : rec.cameras)
+  {
+    const Camera &cam = kv.second;
+    const double v[4] = {cam.fx, cam.fy, cam.cx, cam.cy};
+    Put(out, static_cast<int32_t>(kv.first));
+    Put(out, v);
+    Put(out, cam.dist);
   }
 }
 

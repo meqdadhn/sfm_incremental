@@ -26,6 +26,12 @@ void SaveFeatures(const std::string &path, uint64_t hash, const Features &featur
 bool LoadViewGraph(const std::string &path, uint64_t hash, int num_images, ViewGraph *view_graph);
 void SaveViewGraph(const std::string &path, uint64_t hash, const ViewGraph &view_graph);
 
+/// Result of incremental SfM that the final stage needs: per image registered + pose, the cameras (window BA
+/// may refine them) and the seed pair (BA gauge). Points are not stored, the final stage re-triangulates them.
+/// Load leaves `reconstruction` untouched unless the file matches `hash` and the image names.
+bool LoadIncremental(const std::string &path, uint64_t hash, Reconstruction *reconstruction, ImageId *seed1, ImageId *seed2);
+void SaveIncremental(const std::string &path, uint64_t hash, const Reconstruction &reconstruction, ImageId seed1, ImageId seed2);
+
 /// Averages the image colors of each point's observations.
 void ColorizePoints(Reconstruction *reconstruction);
 
